@@ -98,6 +98,23 @@ services:
       timeout: 10s
       retries: 3
 
+  # Kafka Topic 初始化（自动创建 Sentry 需要的 topics）
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["bash", "-c", "
+      echo '等待 Kafka 就绪...' &&
+      TOPICS='ingest-events ingest-attachments ingest-transactions ingest-metrics ingest-replay-recordings ingest-replay-events ingest-monitors ingest-feedback-events events transactions outcomes outcomes-billing group-attributes shared-resources-usage cdc snuba-spans snuba-metrics snuba-generic-metrics snuba-queries snuba-profile-chunks snuba-ourlogs' &&
+      for topic in $$TOPICS; do
+        kafka-topics --bootstrap-server kafka:9092 --create --topic $$topic --partitions 1 --replication-factor 1 --if-not-exists 2>/dev/null &&
+        echo \"topic $$topic 已就绪\";
+      done &&
+      echo 'Kafka topics 初始化完成'
+      "]
+
   # ============ Snuba（事件存储/查询） ============
 
   # ClickHouse 列式数据库
@@ -287,6 +304,7 @@ services:
       - redis
       - postgres
       - kafka
+      - kafka-init
       - snuba-api
     command: run consumer ingest-events --consumer-group ingest-consumer
 
@@ -297,6 +315,7 @@ services:
       - redis
       - postgres
       - kafka
+      - kafka-init
       - snuba-api
     volumes:
       - sentry-data:/data
