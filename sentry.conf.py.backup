@@ -94,40 +94,15 @@ SENTRY_WEB_OPTIONS = {
     "harakiri": 600,
 }
 
-
 # ============ URL 前缀和 CSRF ============
-import re
-
+SENTRY_OPTIONS["system.url-prefix"] = env("SENTRY_URL_PREFIX", "http://localhost:9000")
+# CSRF trusted origins - include the URL prefix and common variations
 url_prefix = env("SENTRY_URL_PREFIX", "http://localhost:9000")
-SENTRY_OPTIONS["system.url-prefix"] = url_prefix
-
-# CSRF trusted origins - 智能配置，自动支持内网访问
 CSRF_TRUSTED_ORIGINS = [
     url_prefix,
-    "http://localhost:9000",
-    "http://127.0.0.1:9000",
+    "http://localhost:9000",  # Always allow localhost
+    "http://127.0.0.1:9000",  # Always allow 127.0.0.1
 ]
-
-# 自动添加内网 IP 段支持
-# 如果配置了 192.168.x.x，自动允许整个 C 段
-if url_prefix and re.search(r'192\.168\.\d+\.\d+', url_prefix):
-    base_ip = re.search(r'(192\.168\.\d+\.)', url_prefix).group(1)
-    # 添加同一 C 段的所有 IP (1-254)
-    for i in range(1, 255):
-        CSRF_TRUSTED_ORIGINS.append(f"http://{base_ip}{i}:9000")
-
-# 如果配置了 10.x.x.x，自动允许整个 C 段
-elif url_prefix and re.search(r'10\.\d+\.\d+\.\d+', url_prefix):
-    base_ip = re.search(r'(10\.\d+\.\d+\.)', url_prefix).group(1)
-    for i in range(1, 255):
-        CSRF_TRUSTED_ORIGINS.append(f"http://{base_ip}{i}:9000")
-
-# 如果配置了 172.16-31.x.x，自动允许整个 C 段
-elif url_prefix and re.search(r'172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+', url_prefix):
-    base_ip = re.search(r'(172\.\d+\.\d+\.)', url_prefix).group(1)
-    for i in range(1, 255):
-        CSRF_TRUSTED_ORIGINS.append(f"http://{base_ip}{i}:9000")
-
 SECURE_PROXY_SSL_HEADER = None
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
