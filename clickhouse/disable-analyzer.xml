@@ -1,0 +1,9 @@
+<clickhouse>
+  <profiles>
+    <default>
+      <!-- 禁用新查询分析器，兼容 Snuba 生成的 SQL（Lambda 变量别名问题） -->
+      <allow_experimental_analyzer>0</allow_experimental_analyzer>
+      <enable_analyzer>0</enable_analyzer>
+    </default>
+  </profiles>
+</clickhouse>

@@ -1,0 +1,337 @@
+# ============================================
+# Sentry Self-Hosted Docker Compose 配置
+# 包含: Redis, PostgreSQL, Kafka, Zookeeper,
+#       Snuba, Sentry Web/Worker/Cron
+# ============================================
+
+x-sentry-defaults: &sentry-defaults
+  image: getsentry/sentry:latest
+  restart: unless-stopped
+  depends_on:
+    - redis
+    - postgres
+    - kafka
+  environment: &sentry-env
+    # 数据库连接
+    SENTRY_DB_USER: ${POSTGRES_USER}
+    SENTRY_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    SENTRY_DB_NAME: ${POSTGRES_DB}
+    SENTRY_POSTGRES_HOST: postgres
+    SENTRY_POSTGRES_PORT: 5432
+    # Redis 连接
+    SENTRY_REDIS_HOST: redis
+    SENTRY_REDIS_PORT: 6379
+    # Sentry 密钥
+    SENTRY_SECRET_KEY: ${SENTRY_SECRET_KEY}
+    # Snuba 连接
+    SNUBA: http://snuba-api:1218
+    # Kafka 连接
+    SENTRY_EVENT_PROCESSING_STORE: kafka
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    # URL Prefix (fixes CSRF issues)
+    SENTRY_URL_PREFIX: ${SENTRY_URL_PREFIX}
+  volumes:
+    - sentry-data:/data
+    - ./sentry.conf.py:/etc/sentry/sentry.conf.py:ro
+
+services:
+  # ============ 基础设施 ============
+
+  # Redis 缓存
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Zookeeper（Kafka 依赖）
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: "-Djute.maxbuffer=50000000"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+
+  # Kafka 消息队列
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_MESSAGE_MAX_BYTES: 50000000
+      KAFKA_MAX_REQUEST_SIZE: 50000000
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============ Snuba（事件存储/查询） ============
+
+  # ClickHouse 列式数据库
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: ""
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-log:/var/log/clickhouse-server
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/default-user.xml
+      - ./clickhouse/disable-analyzer.xml:/etc/clickhouse-server/users.d/disable-analyzer.xml
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # Snuba API
+  snuba-api:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: &snuba-env
+      SNUBA_SETTINGS: docker
+      CLICKHOUSE_HOST: clickhouse
+      DEFAULT_BROKERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    command: api
+
+  # Snuba Consumer（消费 Kafka 中的事件）
+  snuba-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
+
+  # Snuba Outcomes Consumer
+  snuba-outcomes-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750
+
+  # Snuba Transactions Consumer
+  snuba-transactions-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: consumer --storage transactions --auto-offset-reset=latest --max-batch-time-ms 750
+
+  # Snuba Replays Consumer（将 replay 事件写入 ClickHouse）
+  snuba-replays-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750
+
+  # Snuba Replacer
+  snuba-replacer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: replacer --storage errors --auto-offset-reset=latest
+
+  # Snuba 数据库迁移（只运行一次）
+  snuba-bootstrap:
+    image: getsentry/snuba:latest
+    depends_on:
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: bootstrap --no-migrate --force
+    restart: "no"
+
+  snuba-migrate:
+    image: getsentry/snuba:latest
+    depends_on:
+      - snuba-bootstrap
+    environment: *snuba-env
+    command: migrations migrate --force
+    restart: "no"
+
+  # ============ Relay（SDK 事件接收入口） ============
+
+  # Sentry Relay（接收 SDK 上报的事件，转发给 Sentry Web）
+  relay:
+    image: getsentry/relay:latest
+    restart: unless-stopped
+    depends_on:
+      - sentry-web
+      - kafka
+      - redis
+    volumes:
+      - ./relay:/work/.relay
+
+  # Nginx 反向代理（统一入口，SDK 路径转发到 Relay，其余转发到 Sentry Web）
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - sentry-web
+      - relay
+    ports:
+      - "${SENTRY_PORT:-9000}:9000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+  # ============ Sentry 核心服务 ============
+
+  # Sentry Web 主服务
+  sentry-web:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+      - snuba-migrate
+    command: run web
+
+  # Sentry Worker（后台任务处理）
+  sentry-worker:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+    command: run worker
+
+  # Sentry Cron（定时任务）
+  sentry-cron:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+    command: run cron
+
+  # Sentry Ingest Consumer（事件接收处理）
+  sentry-ingest-consumer:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+    command: run consumer ingest-events --consumer-group ingest-consumer
+
+  # Sentry Ingest Replay Recordings（处理 replay 录制数据）
+  sentry-ingest-replay-recordings:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+    volumes:
+      - sentry-data:/data
+      - ./sentry.conf.py:/etc/sentry/sentry.conf.py:ro
+      - ./patches/replay-ingest.py:/patches/replay-ingest.py:ro
+    entrypoint: ["bash", "-c", "python3 /patches/replay-ingest.py && exec sentry run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings"]
+
+  # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
+  sentry-post-process-forwarder-errors:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+    command: run consumer post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-commit-log --synchronize-commit-group snuba-consumers
+
+  # Sentry Post Process Forwarder Transactions
+  sentry-post-process-forwarder-transactions:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - snuba-api
+    command: run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-transactions-commit-log --synchronize-commit-group snuba-consumers
+
+  # Sentry 数据库初始化（只运行一次）
+  sentry-init:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+    command: upgrade --noinput
+    restart: "no"
+
+  # 创建管理员账号（只运行一次，依赖 sentry-init 完成）
+  sentry-create-admin:
+    <<: *sentry-defaults
+    depends_on:
+      - sentry-init
+    entrypoint: ["bash", "-c", "sentry createuser --email ${SENTRY_ADMIN_EMAIL:-admin@example.com} --password ${SENTRY_ADMIN_PASSWORD:-admin123456} --superuser --no-input || true"]
+    restart: "no"
+
+volumes:
+  sentry-data:
+  redis-data:
+  postgres-data:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-data:
+  clickhouse-data:
+  clickhouse-log:
