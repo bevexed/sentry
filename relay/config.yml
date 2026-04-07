@@ -2,7 +2,7 @@
 relay:
   # 以 managed 模式运行，从上游 Sentry 获取项目配置
   mode: managed
-  upstream: "http://sentry-web:9000/"
+  upstream: "http://nginx:9000/"
   host: 0.0.0.0
   port: 3000
 

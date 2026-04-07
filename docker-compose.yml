@@ -209,14 +209,17 @@ services:
 
   # ============ Relay（SDK 事件接收入口） ============
 
-  # Sentry Relay（接收 SDK 上报的事件，转发给 Sentry Web）
+  # Sentry Relay（接收 SDK 上报的事件，通过 Nginx 转发给 Sentry Web）
   relay:
     image: getsentry/relay:latest
     restart: unless-stopped
     depends_on:
-      - sentry-web
-      - kafka
-      - redis
+      nginx:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
     volumes:
       - ./relay:/work/.relay
 
@@ -225,12 +228,18 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     depends_on:
-      - sentry-web
-      - relay
+      sentry-web:
+        condition: service_healthy
     ports:
       - "${SENTRY_PORT:-9000}:9000"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:9000/ 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ============ Sentry 核心服务 ============
 
@@ -244,6 +253,12 @@ services:
       - snuba-api
       - snuba-migrate
     command: run web
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:9000/_health/\")' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   # Sentry Worker（后台任务处理）
   sentry-worker:

@@ -257,3 +257,4 @@ docker compose up -d relay
 - ClickHouse 和 Kafka 消耗较多内存，确保服务器资源充足（推荐 16GB+）
 - SDK 事件通过 Nginx（端口 9000）上报，Nginx 自动将 SDK 请求转发到 Relay
 - 启用 Replay 后，首次需要刷新前端页面让 SDK 创建新的 replay session
+
