@@ -151,6 +151,12 @@ SENTRY_EVENTSTREAM = "sentry.eventstream.kafka.backend.KafkaEventStream"
 SENTRY_FEATURES = {
     # 启用 Session Replay
     "organizations:session-replay": True,
+    # 启用性能监控
+    "organizations:performance-view": True,
+    "organizations:performance-issues-all-events-tab": True,
+    "organizations:performance-span-histogram-view": True,
+    "organizations:performance-trace-details": True,
+    "organizations:performance-tracing-without-performance": True,
 }
 
 # ============ Relay ============
@@ -164,6 +170,6 @@ SENTRY_OPTIONS["mail.from"] = env("SENTRY_SERVER_EMAIL") or "root@localhost"
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    "192.168.158.244",
+    "192.168.8.89",
     "*",  # Allow all hosts (for development/testing)
 ]

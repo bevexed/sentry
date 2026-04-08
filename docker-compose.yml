@@ -206,6 +206,17 @@ services:
     environment: *snuba-env
     command: replacer --storage errors --auto-offset-reset=latest
 
+  # Snuba Spans Consumer（将 spans 数据写入 ClickHouse，支持性能功能）
+  snuba-spans-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    command: consumer --storage spans --auto-offset-reset=latest --max-batch-time-ms 750
+
   # Snuba 数据库迁移（只运行一次）
   snuba-bootstrap:
     image: getsentry/snuba:latest
@@ -307,6 +318,17 @@ services:
       - kafka-init
       - snuba-api
     command: run consumer ingest-events --consumer-group ingest-consumer
+
+  # Sentry Ingest Consumer Transactions（处理性能数据 transactions）
+  sentry-ingest-consumer-transactions:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - kafka-init
+      - snuba-api
+    command: run consumer ingest-transactions --consumer-group ingest-consumer
 
   # Sentry Ingest Replay Recordings（处理 replay 录制数据）
   sentry-ingest-replay-recordings:
