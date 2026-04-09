@@ -41,6 +41,11 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --save 60 1000
+    deploy:
+      resources:
+        limits:
+          memory: 768M
     volumes:
       - redis-data:/data
     healthcheck:
@@ -57,6 +62,22 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "max_connections=100"
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -87,9 +108,17 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_HOURS: 6
       KAFKA_MESSAGE_MAX_BYTES: 50000000
       KAFKA_MAX_REQUEST_SIZE: 50000000
+      # 内存优化
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+      KAFKA_LOG_SEGMENT_BYTES: 52428800
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 60000
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -125,6 +154,10 @@ services:
       CLICKHOUSE_DB: default
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: ""
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-log:/var/log/clickhouse-server
@@ -280,6 +313,10 @@ services:
       - kafka
       - snuba-api
       - snuba-migrate
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     command: run web
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:9000/_health/\")' 2>/dev/null || exit 1"]
@@ -296,6 +333,10 @@ services:
       - postgres
       - kafka
       - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     command: run worker
 
   # Sentry Cron（定时任务）

@@ -258,3 +258,5 @@ docker compose up -d relay
 - SDK 事件通过 Nginx（端口 9000）上报，Nginx 自动将 SDK 请求转发到 Relay
 - 启用 Replay 后，首次需要刷新前端页面让 SDK 创建新的 replay session
 
+## 监控
+`docker stats $(docker compose ps -q)`

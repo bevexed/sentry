@@ -87,11 +87,14 @@ SENTRY_DIGESTS = "sentry.digests.backends.redis.RedisBackend"
 SENTRY_WEB_HOST = "0.0.0.0"
 SENTRY_WEB_PORT = 9000
 SENTRY_WEB_OPTIONS = {
-    "workers": 3,
+    "workers": 2,
     "threads": 4,
     "http-keepalive": True,
     "http-chunked-input": True,
     "harakiri": 600,
+    # 每个 worker 处理 10000 个请求后自动重启，防止内存泄漏
+    "max-requests": 10000,
+    "max-requests-delta": 500,
 }
 
 
@@ -158,6 +161,9 @@ SENTRY_FEATURES = {
     "organizations:performance-trace-details": True,
     "organizations:performance-tracing-without-performance": True,
 }
+
+# ============ 数据保留策略（天） ============
+SENTRY_OPTIONS["system.event-retention-days"] = 30
 
 # ============ Relay ============
 SENTRY_USE_RELAY = True
