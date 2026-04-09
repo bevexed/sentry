@@ -163,6 +163,7 @@ services:
       - clickhouse-log:/var/log/clickhouse-server
       - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/default-user.xml
       - ./clickhouse/disable-analyzer.xml:/etc/clickhouse-server/users.d/disable-analyzer.xml
+      - ./clickhouse/log-config.xml:/etc/clickhouse-server/config.d/log-config.xml
     ulimits:
       nofile:
         soft: 262144

@@ -258,5 +258,12 @@ docker compose up -d relay
 - SDK 事件通过 Nginx（端口 9000）上报，Nginx 自动将 SDK 请求转发到 Relay
 - 启用 Replay 后，首次需要刷新前端页面让 SDK 创建新的 replay session
 
-## 监控
+## 运维相关
+### Docker 统计信息
 `docker stats $(docker compose ps -q)`
+
+### Docker 卷使用情况
+`docker compose ps -q | xargs docker inspect   --format '{{ range .Mounts }}{{ if eq .Type "volume" }}{{ .Name }}{{ "\n" }}{{ end }}{{ end }}'   | sort -u   | xargs -I {} du -sh /var/lib/docker/volumes/{}/_data`
+
+### ClickHouse TTL 设置
+./scripts/setup-clickhouse-ttl.sh 7
