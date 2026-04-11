@@ -267,3 +267,6 @@ docker compose up -d relay
 
 ### ClickHouse TTL 设置
 ./scripts/setup-clickhouse-ttl.sh 7
+
+### Sentry 添加用户
+docker compose run --rm sentry-web sentry createuser   --email 邮箱   --password 密码   --superuser
