@@ -216,7 +216,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Outcomes Consumer
@@ -246,7 +246,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     command: consumer --storage transactions --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Replays Consumer（将 replay 事件写入 ClickHouse）
@@ -442,7 +442,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
     command: run consumer ingest-events --consumer-group ingest-consumer
 
   # Sentry Ingest Consumer Transactions（处理性能数据 transactions）
@@ -457,7 +457,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
     command: run consumer ingest-transactions --consumer-group ingest-consumer
 
   # Sentry Ingest Replay Recordings（处理 replay 录制数据）
@@ -476,7 +476,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     entrypoint: ["bash", "-c", "python3 /patches/replay-ingest.py && exec sentry run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings"]
 
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
@@ -490,7 +490,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
     command: run consumer post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-commit-log --synchronize-commit-group snuba-consumers
 
   # Sentry Post Process Forwarder Transactions
@@ -504,7 +504,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
     command: run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-transactions-commit-log --synchronize-commit-group snuba-consumers
 
   # Sentry 数据库初始化（只运行一次）

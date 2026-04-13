@@ -319,7 +319,7 @@ docker stats $(docker compose ps -q)
 
 ### Docker 卷使用情况
 ```bash
-docker system df -v | grep sentry
+docker compose ps -q | xargs docker inspect   --format '{{ range .Mounts }}{{ if eq .Type "volume" }}{{ .Name }}{{ "\n" }}{{ end }}{{ end }}'   | sort -u   | xargs -I {} du -sh /var/lib/docker/volumes/{}/_data
 ```
 
 ### 手动清理 ClickHouse 过期数据
