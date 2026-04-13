@@ -87,14 +87,14 @@ SENTRY_DIGESTS = "sentry.digests.backends.redis.RedisBackend"
 SENTRY_WEB_HOST = "0.0.0.0"
 SENTRY_WEB_PORT = 9000
 SENTRY_WEB_OPTIONS = {
-    "workers": 2,
+    "workers": 1,
     "threads": 4,
     "http-keepalive": True,
     "http-chunked-input": True,
-    "harakiri": 600,
-    # 每个 worker 处理 10000 个请求后自动重启，防止内存泄漏
-    "max-requests": 10000,
-    "max-requests-delta": 500,
+    "harakiri": 300,
+    # 每个 worker 处理 5000 个请求后自动重启，防止内存泄漏
+    "max-requests": 5000,
+    "max-requests-delta": 300,
 }
 
 
@@ -177,5 +177,5 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "192.168.8.89",
-    "*",  # Allow all hosts (for development/testing)
+    # "*",  # Allow all hosts (for development/testing)
 ]

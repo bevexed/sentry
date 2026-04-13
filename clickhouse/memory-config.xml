@@ -1,0 +1,22 @@
+<clickhouse>
+  <profiles>
+    <default>
+      <!-- 单个查询最大内存 500MB -->
+      <max_memory_usage>500000000</max_memory_usage>
+      <!-- 所有查询总内存不超过 1GB -->
+      <max_memory_usage_for_all_queries>1000000000</max_memory_usage_for_all_queries>
+      <!-- 后台合并最大内存 256MB -->
+      <max_bytes_before_external_group_by>200000000</max_bytes_before_external_group_by>
+      <max_bytes_before_external_sort>200000000</max_bytes_before_external_sort>
+    </default>
+  </profiles>
+
+  <!-- 服务端全局内存限制 -->
+  <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+
+  <!-- 后台合并使用的内存限制 -->
+  <merge_tree>
+    <max_bytes_to_merge_at_max_space_in_pool>536870912</max_bytes_to_merge_at_max_space_in_pool>
+    <number_of_free_entries_in_pool_to_execute_mutation>3</number_of_free_entries_in_pool_to_execute_mutation>
+  </merge_tree>
+</clickhouse>

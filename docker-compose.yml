@@ -41,11 +41,11 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --save 60 1000
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --save 300 100 --rdbcompression yes
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 256M
     volumes:
       - redis-data:/data
     healthcheck:
@@ -65,19 +65,19 @@ services:
     command:
       - "postgres"
       - "-c"
-      - "shared_buffers=256MB"
+      - "shared_buffers=128MB"
       - "-c"
-      - "work_mem=16MB"
+      - "work_mem=4MB"
       - "-c"
-      - "maintenance_work_mem=128MB"
+      - "maintenance_work_mem=64MB"
       - "-c"
-      - "effective_cache_size=1GB"
+      - "effective_cache_size=384MB"
       - "-c"
-      - "max_connections=100"
+      - "max_connections=50"
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 768M
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -93,7 +93,11 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-      KAFKA_OPTS: "-Djute.maxbuffer=50000000"
+      KAFKA_OPTS: "-Djute.maxbuffer=50000000 -Xmx128M"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-log:/var/lib/zookeeper/log
@@ -112,13 +116,14 @@ services:
       KAFKA_MESSAGE_MAX_BYTES: 50000000
       KAFKA_MAX_REQUEST_SIZE: 50000000
       # 内存优化
-      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
-      KAFKA_LOG_SEGMENT_BYTES: 52428800
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms128M"
+      KAFKA_LOG_SEGMENT_BYTES: 26214400
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 60000
+      KAFKA_LOG_RETENTION_BYTES: 536870912
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 768M
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -157,13 +162,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1536M
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-log:/var/log/clickhouse-server
       - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/default-user.xml
       - ./clickhouse/disable-analyzer.xml:/etc/clickhouse-server/users.d/disable-analyzer.xml
       - ./clickhouse/log-config.xml:/etc/clickhouse-server/config.d/log-config.xml
+      - ./clickhouse/memory-config.xml:/etc/clickhouse-server/config.d/memory-config.xml
     ulimits:
       nofile:
         soft: 262144
@@ -183,6 +189,10 @@ services:
       DEFAULT_BROKERS: kafka:9092
       REDIS_HOST: redis
       REDIS_PORT: 6379
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     command: api
 
   # Snuba Consumer（消费 Kafka 中的事件）
@@ -194,6 +204,10 @@ services:
       - clickhouse
       - kafka
     environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Outcomes Consumer
@@ -205,6 +219,10 @@ services:
       - clickhouse
       - kafka
     environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 192M
     command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750
 
   # Snuba Transactions Consumer
@@ -216,6 +234,10 @@ services:
       - clickhouse
       - kafka
     environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     command: consumer --storage transactions --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Replays Consumer（将 replay 事件写入 ClickHouse）
@@ -227,6 +249,10 @@ services:
       - clickhouse
       - kafka
     environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 192M
     command: consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Replacer
@@ -238,6 +264,10 @@ services:
       - clickhouse
       - kafka
     environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 192M
     command: replacer --storage errors --auto-offset-reset=latest
 
   # Snuba Spans Consumer（将 spans 数据写入 ClickHouse，支持性能功能）
@@ -249,6 +279,10 @@ services:
       - clickhouse
       - kafka
     environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 192M
     command: consumer --storage spans --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba 数据库迁移（只运行一次）
@@ -275,6 +309,10 @@ services:
   relay:
     image: getsentry/relay:latest
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     depends_on:
       nginx:
         condition: service_healthy
@@ -317,7 +355,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1G
     command: run web
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:9000/_health/\")' 2>/dev/null || exit 1"]
@@ -334,11 +372,16 @@ services:
       - postgres
       - kafka
       - snuba-api
+    environment:
+      <<: *sentry-env
+      # 限制 Celery 并发数和子进程内存，防止 OOM
+      CELERYD_CONCURRENCY: "2"
+      CELERY_WORKER_MAX_MEMORY_PER_CHILD: "200000"
     deploy:
       resources:
         limits:
-          memory: 2G
-    command: run worker
+          memory: 1G
+    command: run worker -c 2 --max-tasks-per-child=100
 
   # Sentry Cron（定时任务）
   sentry-cron:
@@ -348,6 +391,10 @@ services:
       - postgres
       - kafka
       - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     command: run cron
 
   # Sentry Ingest Consumer（事件接收处理）
@@ -359,6 +406,10 @@ services:
       - kafka
       - kafka-init
       - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     command: run consumer ingest-events --consumer-group ingest-consumer
 
   # Sentry Ingest Consumer Transactions（处理性能数据 transactions）
@@ -370,6 +421,10 @@ services:
       - kafka
       - kafka-init
       - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     command: run consumer ingest-transactions --consumer-group ingest-consumer
 
   # Sentry Ingest Replay Recordings（处理 replay 录制数据）
@@ -385,6 +440,10 @@ services:
       - sentry-data:/data
       - ./sentry.conf.py:/etc/sentry/sentry.conf.py:ro
       - ./patches/replay-ingest.py:/patches/replay-ingest.py:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     entrypoint: ["bash", "-c", "python3 /patches/replay-ingest.py && exec sentry run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings"]
 
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
@@ -395,6 +454,10 @@ services:
       - postgres
       - kafka
       - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     command: run consumer post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-commit-log --synchronize-commit-group snuba-consumers
 
   # Sentry Post Process Forwarder Transactions
@@ -405,6 +468,10 @@ services:
       - postgres
       - kafka
       - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     command: run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-transactions-commit-log --synchronize-commit-group snuba-consumers
 
   # Sentry 数据库初始化（只运行一次）
