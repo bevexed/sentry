@@ -87,7 +87,7 @@ SENTRY_DIGESTS = "sentry.digests.backends.redis.RedisBackend"
 SENTRY_WEB_HOST = "0.0.0.0"
 SENTRY_WEB_PORT = 9000
 SENTRY_WEB_OPTIONS = {
-    "workers": 1,
+    "workers": 2,
     "threads": 4,
     "http-keepalive": True,
     "http-chunked-input": True,
@@ -160,10 +160,12 @@ SENTRY_FEATURES = {
     "organizations:performance-span-histogram-view": True,
     "organizations:performance-trace-details": True,
     "organizations:performance-tracing-without-performance": True,
+    # 启用自定义入站过滤器
+    "projects:custom-inbound-filters": True,
 }
 
 # ============ 数据保留策略（天） ============
-SENTRY_OPTIONS["system.event-retention-days"] = 30
+SENTRY_OPTIONS["system.event-retention-days"] = 14
 
 # ============ Relay ============
 SENTRY_USE_RELAY = True

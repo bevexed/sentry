@@ -41,11 +41,11 @@ services:
   redis:
     image: redis:7
     restart: unless-stopped
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --save 300 100 --rdbcompression yes
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save 300 100 --rdbcompression yes
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
     volumes:
       - redis-data:/data
     healthcheck:
@@ -65,19 +65,19 @@ services:
     command:
       - "postgres"
       - "-c"
-      - "shared_buffers=128MB"
+      - "shared_buffers=192MB"
       - "-c"
-      - "work_mem=4MB"
+      - "work_mem=8MB"
       - "-c"
-      - "maintenance_work_mem=64MB"
+      - "maintenance_work_mem=128MB"
       - "-c"
-      - "effective_cache_size=384MB"
+      - "effective_cache_size=768MB"
       - "-c"
-      - "max_connections=50"
+      - "max_connections=80"
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1G
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -93,21 +93,29 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-      KAFKA_OPTS: "-Djute.maxbuffer=50000000 -Xmx128M"
+      KAFKA_OPTS: "-Djute.maxbuffer=50000000"
+      KAFKA_HEAP_OPTS: "-Xms128M -Xmx192M"
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | timeout 2 bash -c 'cat > /dev/tcp/localhost/2181' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
 
   # Kafka 消息队列
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     restart: unless-stopped
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     environment:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
@@ -116,21 +124,22 @@ services:
       KAFKA_MESSAGE_MAX_BYTES: 50000000
       KAFKA_MAX_REQUEST_SIZE: 50000000
       # 内存优化
-      KAFKA_HEAP_OPTS: "-Xmx256M -Xms128M"
+      KAFKA_HEAP_OPTS: "-Xmx384M -Xms256M"
       KAFKA_LOG_SEGMENT_BYTES: 26214400
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 60000
       KAFKA_LOG_RETENTION_BYTES: 536870912
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1G
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
       test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 30s
 
   # Kafka Topic 初始化（自动创建 Sentry 需要的 topics）
   kafka-init:
@@ -162,7 +171,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 2G
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-log:/var/log/clickhouse-server
@@ -192,7 +201,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     command: api
 
   # Snuba Consumer（消费 Kafka 中的事件）
@@ -303,6 +312,30 @@ services:
     command: migrations migrate --force
     restart: "no"
 
+  # ClickHouse TTL 自动设置（启动时自动为各表设置 14 天过期）
+  clickhouse-ttl-init:
+    image: clickhouse/clickhouse-server:25.3
+    depends_on:
+      - clickhouse
+      - snuba-migrate
+    restart: "no"
+    entrypoint: ["bash", "-c", "
+      RETENTION_DAYS=14 &&
+      echo '等待 ClickHouse 就绪...' &&
+      for i in $$(seq 1 30); do
+        clickhouse-client --host clickhouse --query 'SELECT 1' 2>/dev/null && break;
+        sleep 2;
+      done &&
+      echo \"设置 TTL: 保留 $${RETENTION_DAYS} 天\" &&
+      for pair in 'replays_local:timestamp' 'errors_local:timestamp' 'transactions_local:finish_ts' 'spans_local:timestamp' 'outcomes_raw_local:timestamp' 'outcomes_hourly_local:timestamp'; do
+        table=$${pair%%:*} &&
+        col=$${pair##*:} &&
+        clickhouse-client --host clickhouse --query \"ALTER TABLE $${table} MODIFY TTL $${col} + INTERVAL $${RETENTION_DAYS} DAY\" 2>/dev/null &&
+        echo \"  ✓ $${table}\" || echo \"  ⚠ $${table}（跳过）\";
+      done &&
+      echo 'TTL 设置完成'
+      "]
+
   # ============ Relay（SDK 事件接收入口） ============
 
   # Sentry Relay（接收 SDK 上报的事件，通过 Nginx 转发给 Sentry Web）
@@ -312,7 +345,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     depends_on:
       nginx:
         condition: service_healthy
@@ -355,7 +388,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 1536M
     command: run web
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:9000/_health/\")' 2>/dev/null || exit 1"]
@@ -380,7 +413,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 1536M
     command: run worker -c 2 --max-tasks-per-child=100
 
   # Sentry Cron（定时任务）
@@ -394,7 +427,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     command: run cron
 
   # Sentry Ingest Consumer（事件接收处理）

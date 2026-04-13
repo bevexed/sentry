@@ -8,8 +8,8 @@
 
 set -e
 
-# 保留天数，默认 30
-RETENTION_DAYS=${1:-30}
+# 保留天数，默认 14
+RETENTION_DAYS=${1:-14}
 CLICKHOUSE_CONTAINER="sentry-clickhouse-1"
 
 echo "=========================================="
