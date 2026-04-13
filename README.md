@@ -4,23 +4,29 @@
 
 ## 架构组件
 
-| 组件 | 端口 | 说明 |
-|------|------|------|
-| **Relay** | 3000 | SDK 事件接收入口 |
-| **Sentry Web** | 9000 | Web UI 和管理 API |
-| **Sentry Worker** | - | 后台异步任务处理 |
-| **Sentry Cron** | - | 定时任务调度 |
-| **PostgreSQL** | 5432 | 主数据库 |
-| **Redis** | 6379 | 缓存和消息队列 |
-| **Kafka + Zookeeper** | 9092 | 事件流处理 |
-| **ClickHouse** | 8123 | 事件数据列式存储 |
-| **Snuba** | 1218 | 事件查询引擎 |
+| 组件 | 端口 | 内存限制 | 说明 |
+|------|------|----------|------|
+| **Nginx** | 9000 | - | 统一入口，SDK 路径转发 Relay，其余转发 Web |
+| **Relay** | 3000 | 384M | SDK 事件接收入口 |
+| **Sentry Web** | 9000 | 1.5G | Web UI 和管理 API（2 workers） |
+| **Sentry Worker** | - | 1.5G | 后台异步任务（并发 2，自动内存回收） |
+| **Sentry Cron** | - | 384M | 定时任务调度 |
+| **Sentry Consumers ×5** | - | 256-384M | 事件接收和后处理 |
+| **PostgreSQL** | 5432 | 1G | 主数据库 |
+| **Redis** | 6379 | 512M | 缓存和消息队列（maxmemory 256MB） |
+| **Kafka** | 9092 | 1G | 事件流处理（堆 384M） |
+| **Zookeeper** | 2181 | 384M | Kafka 依赖（堆 192M） |
+| **ClickHouse** | 8123 | 2G | 事件数据列式存储（单查询限 500MB） |
+| **Snuba API** | 1218 | 512M | 事件查询引擎 |
+| **Snuba Consumers ×5** | - | 192-256M | Kafka 到 ClickHouse 的数据消费 |
+
+> 总内存上限约 **~12G**，适配 16-32GB 主机。
 
 ## 系统要求
 
 - Docker >= 20.10
 - Docker Compose >= 2.0
-- 内存 >= 8GB（推荐 16GB）
+- 内存 >= 16GB（推荐 32GB）
 - 磁盘 >= 20GB
 
 ## 快速开始
@@ -145,7 +151,9 @@ sentry-docker/
 │   └── credentials.json
 ├── clickhouse/                   # ClickHouse 配置
 │   ├── users.xml                 # 用户配置
-│   └── disable-analyzer.xml      # 禁用新查询分析器（兼容 Snuba）
+│   ├── disable-analyzer.xml      # 禁用新查询分析器（兼容 Snuba）
+│   ├── log-config.xml            # 日志级别和轮转配置
+│   └── memory-config.xml         # 内存限制（单查询 500MB，总量 1GB）
 ├── patches/                      # 代码补丁
 │   └── replay-ingest.py          # Replay 写入 ClickHouse 的修复补丁
 ├── scripts/                      # 部署脚本
@@ -226,12 +234,19 @@ print('密码已重置')
 # 1. 停止 Relay
 docker compose stop relay
 
-# 2. 删除旧凭据，让 Relay 重新生成（凭据自动写入 relay/ 目录）
-del relay\credentials.json          # Windows
-# rm relay/credentials.json         # Linux/Mac
-docker compose run --rm --no-deps relay credentials generate
+# 2. 删除旧凭据
+rm -f relay/credentials.json
 
-# 3. 重启 Relay
+# 3. 确保 relay 目录可写（容器内用 uid=1000 运行）
+chmod 777 relay/
+
+# 4. 重新生成凭据（在容器内直接写入挂载目录）
+docker compose run --rm --entrypoint="" relay relay credentials generate
+
+# 5. 恢复目录权限
+chmod 755 relay/
+
+# 6. 重启 Relay
 docker compose up -d relay
 ```
 
@@ -249,24 +264,88 @@ docker compose up -d relay
 2. 确认 `sentry-ingest-replay-recordings` 和 `snuba-replays-consumer` 容器正在运行
 3. 前端需要**完全刷新页面**让 SDK 创建新的 replay session（旧 session 的首个 segment 可能已丢失）
 
+## 数据保留策略
+
+所有数据默认保留 **14 天**，涉及三处配置：
+
+| 配置位置 | 说明 |
+|----------|------|
+| `sentry.conf.py` → `event-retention-days = 14` | Sentry 应用层保留策略 |
+| `clickhouse-ttl-init` 容器 | 启动时自动为 ClickHouse 表设置 14 天 TTL，过期数据自动删除 |
+| `scripts/cleanup-data.sh` | 手动清理脚本（默认 14 天），可按需执行 |
+
+> ClickHouse TTL 在每次 `docker compose up` 时由 `clickhouse-ttl-init` 容器自动设置，无需手动执行。
+
+## 资源优化说明
+
+### Worker 防 OOM
+- Celery 并发数限制为 2（`-c 2`）
+- 每个子进程处理 100 个任务后自动重启（`--max-tasks-per-child=100`）
+- 单个子进程内存上限 200MB（`CELERY_WORKER_MAX_MEMORY_PER_CHILD`）
+
+### ClickHouse 内存控制
+- `clickhouse/memory-config.xml` 限制单查询 500MB、所有查询总量 1GB
+- 后台合并操作内存限制 256MB
+
+### Redis IO 优化
+- RDB 快照间隔从 `save 60 1000` 改为 `save 300 100`，减少磁盘写入
+- 开启 rdbcompression 压缩
+
+### 启动顺序保障
+- Zookeeper 配有 healthcheck，Kafka 等待 Zookeeper healthy 后才启动
+- Kafka 配有 healthcheck + start_period，下游服务等待 Kafka healthy
+
+### 事件过滤
+在 Sentry Web UI → 项目 → **Settings → Inbound Filters → Error Message** 中可配置过滤规则，例如：
+```
+*资源加载失败*
+```
+
 ## 注意事项
 
-- **必须按顺序启动**，不能直接 `docker compose up -d`（详见「快速开始」）
+- **首次部署必须按顺序启动**（详见「快速开始」），后续可直接 `docker compose up -d`
 - 生产环境建议修改所有默认密码和 `SENTRY_SECRET_KEY`
 - 生产环境建议配置反向代理（如 Nginx）并启用 HTTPS
-- ClickHouse 和 Kafka 消耗较多内存，确保服务器资源充足（推荐 16GB+）
+- 总内存上限约 12G，确保主机内存 >= 16GB
 - SDK 事件通过 Nginx（端口 9000）上报，Nginx 自动将 SDK 请求转发到 Relay
 - 启用 Replay 后，首次需要刷新前端页面让 SDK 创建新的 replay session
 
 ## 运维相关
+
 ### Docker 统计信息
-`docker stats $(docker compose ps -q)`
+```bash
+docker stats $(docker compose ps -q)
+```
 
 ### Docker 卷使用情况
-`docker compose ps -q | xargs docker inspect   --format '{{ range .Mounts }}{{ if eq .Type "volume" }}{{ .Name }}{{ "\n" }}{{ end }}{{ end }}'   | sort -u   | xargs -I {} du -sh /var/lib/docker/volumes/{}/_data`
+```bash
+docker system df -v | grep sentry
+```
 
-### ClickHouse TTL 设置
-./scripts/setup-clickhouse-ttl.sh 7
+### 手动清理 ClickHouse 过期数据
+```bash
+# 默认清理 14 天前的数据
+bash scripts/cleanup-data.sh
+
+# 指定保留天数
+bash scripts/cleanup-data.sh 7
+```
+
+### 手动设置 ClickHouse TTL（通常不需要，已自动执行）
+```bash
+bash scripts/setup-clickhouse-ttl.sh 14
+```
 
 ### Sentry 添加用户
-docker compose run --rm sentry-web sentry createuser   --email 邮箱   --password 密码   --superuser
+```bash
+docker compose run --rm sentry-web sentry createuser \
+  --email 邮箱 \
+  --password 密码 \
+  --superuser
+```
+
+### 查看系统内存
+```bash
+free -h
+docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}"
+```
