@@ -151,27 +151,63 @@ SENTRY_OPTIONS["system.secret-key"] = secret_key
 SENTRY_EVENTSTREAM = "sentry.eventstream.kafka.backend.KafkaEventStream"
 
 # ============ Feature Flags ============
-SENTRY_FEATURES = {
-    # 启用 Session Replay
-    "organizations:session-replay": True,
-    # 启用性能监控
-    "organizations:performance-view": True,
-    "organizations:performance-issues-all-events-tab": True,
-    "organizations:performance-span-histogram-view": True,
-    "organizations:performance-trace-details": True,
-    "organizations:performance-tracing-without-performance": True,
-
-    "organizations:indexed-spans-extraction": True,
-    "organizations:starfish-view": True,
-    "organizations:insights-entry-points": True,
-    "organizations:insights-initial-modules": True,
-    "organizations:performance-spans-new-ui": True,
-
-    # 启用自定义入站过滤器
-    "projects:custom-inbound-filters": True,
-
-
-}
+# 参考官方 self-hosted: https://github.com/getsentry/self-hosted/blob/master/sentry/sentry.conf.example.py
+SENTRY_FEATURES = {}
+SENTRY_FEATURES["projects:sample-events"] = False
+SENTRY_FEATURES.update(
+    {
+        feature: True
+        for feature in (
+            # 基础功能
+            "organizations:discover",
+            "organizations:global-views",
+            "organizations:issue-views",
+            "organizations:incidents",
+            "organizations:integrations-issue-basic",
+            "organizations:integrations-issue-sync",
+            "organizations:invite-members",
+            "organizations:sso-basic",
+            "organizations:sso-saml2",
+            "organizations:advanced-search",
+            "organizations:issue-platform",
+            "organizations:monitors",
+            "organizations:dashboards-mep",
+            "organizations:mep-rollout-flag",
+            "organizations:dashboards-rh-widget",
+            "organizations:dynamic-sampling",
+            "projects:custom-inbound-filters",
+            "projects:data-forwarding",
+            "projects:discard-groups",
+            "projects:plugins",
+            "projects:rate-limits",
+            "projects:servicehooks",
+        )
+        # 性能/Tracing/Spans 相关（Pageloads 核心依赖）
+        + (
+            "organizations:performance-view",
+            "organizations:span-stats",
+            "organizations:visibility-explore-view",
+            "organizations:visibility-explore-range-high",
+            "organizations:transaction-metrics-extraction",
+            "organizations:indexed-spans-extraction",
+            "organizations:insights-entry-points",
+            "organizations:insights-initial-modules",
+            "organizations:insights-addon-modules",
+            "organizations:starfish-mobile-appstart",
+            "organizations:on-demand-metrics-extraction",
+            "projects:span-metrics-extraction",
+            "projects:span-metrics-extraction-addons",
+        )
+        # Session Replay
+        + (
+            "organizations:session-replay",
+        )
+        # User Feedback
+        + (
+            "organizations:user-feedback-ui",
+        )
+    }
+)
 
 # ============ 数据保留策略（天） ============
 SENTRY_OPTIONS["system.event-retention-days"] = 14

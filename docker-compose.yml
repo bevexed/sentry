@@ -150,7 +150,7 @@ services:
     restart: "no"
     entrypoint: ["bash", "-c", "
       echo '等待 Kafka 就绪...' &&
-      TOPICS='ingest-events ingest-attachments ingest-transactions ingest-metrics ingest-replay-recordings ingest-replay-events ingest-monitors ingest-feedback-events events transactions outcomes outcomes-billing group-attributes shared-resources-usage cdc snuba-spans snuba-metrics snuba-generic-metrics snuba-queries snuba-profile-chunks snuba-ourlogs' &&
+      TOPICS='ingest-events ingest-attachments ingest-transactions ingest-metrics ingest-generic-metrics ingest-performance-metrics ingest-spans ingest-replay-recordings ingest-replay-events ingest-monitors ingest-feedback-events events transactions outcomes outcomes-billing group-attributes shared-resources-usage cdc snuba-spans snuba-metrics snuba-generic-metrics snuba-generic-metrics-distributions-subscription-results snuba-generic-metrics-sets-subscription-results snuba-generic-metrics-counters-subscription-results snuba-generic-metrics-gauges-subscription-results snuba-metrics-subscription-results snuba-queries snuba-profile-chunks snuba-ourlogs processed-spans' &&
       for topic in $$TOPICS; do
         kafka-topics --bootstrap-server kafka:9092 --create --topic $$topic --partitions 1 --replication-factor 1 --if-not-exists 2>/dev/null &&
         echo \"topic $$topic 已就绪\";
@@ -184,7 +184,7 @@ services:
         soft: 262144
         hard: 262144
 
-  # Snuba API
+  # Snuba API（查询引擎，Sentry Web 通过它查询 ClickHouse）
   snuba-api:
     image: getsentry/snuba:latest
     restart: unless-stopped
@@ -204,7 +204,7 @@ services:
           memory: 512M
     command: api
 
-  # Snuba Consumer（消费 Kafka 中的事件）
+  # Snuba Errors Consumer（消费 errors 事件写入 ClickHouse）
   snuba-consumer:
     image: getsentry/snuba:latest
     restart: unless-stopped
@@ -219,7 +219,7 @@ services:
           memory: 512M
     command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
 
-  # Snuba Outcomes Consumer
+  # Snuba Outcomes Consumer（消费 outcomes 数据写入 ClickHouse，用于统计丢弃/过滤的事件）
   snuba-outcomes-consumer:
     image: getsentry/snuba:latest
     restart: unless-stopped
@@ -234,7 +234,7 @@ services:
           memory: 192M
     command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750
 
-  # Snuba Transactions Consumer
+  # Snuba Transactions Consumer（消费 transactions 性能数据写入 ClickHouse）
   snuba-transactions-consumer:
     image: getsentry/snuba:latest
     restart: unless-stopped
@@ -264,7 +264,7 @@ services:
           memory: 192M
     command: consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750
 
-  # Snuba Replacer
+  # Snuba Replacer（处理事件合并/删除等变更操作）
   snuba-replacer:
     image: getsentry/snuba:latest
     restart: unless-stopped
@@ -294,6 +294,81 @@ services:
           memory: 192M
     command: consumer --storage spans --auto-offset-reset=latest --max-batch-time-ms 750
 
+  # Snuba Metrics Consumer（将 metrics 数据写入 ClickHouse）
+  snuba-metrics-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    command: rust-consumer --storage metrics_raw --consumer-group snuba-metrics-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+
+  # Snuba Generic Metrics Distributions Consumer（消费 distributions 类型的 generic metrics 写入 ClickHouse）
+  snuba-generic-metrics-distributions-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    command: rust-consumer --storage generic_metrics_distributions_raw --consumer-group snuba-gen-metrics-distributions-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+
+  # Snuba Generic Metrics Sets Consumer（消费 sets 类型的 generic metrics 写入 ClickHouse）
+  snuba-generic-metrics-sets-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    command: rust-consumer --storage generic_metrics_sets_raw --consumer-group snuba-gen-metrics-sets-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+
+  # Snuba Generic Metrics Counters Consumer（消费 counters 类型的 generic metrics 写入 ClickHouse）
+  snuba-generic-metrics-counters-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    command: rust-consumer --storage generic_metrics_counters_raw --consumer-group snuba-gen-metrics-counters-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+
+  # Snuba Generic Metrics Gauges Consumer（消费 gauges 类型的 generic metrics 写入 ClickHouse）
+  snuba-generic-metrics-gauges-consumer:
+    image: getsentry/snuba:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - clickhouse
+      - kafka
+    environment: *snuba-env
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    command: rust-consumer --storage generic_metrics_gauges_raw --consumer-group snuba-gen-metrics-gauges-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+
   # Snuba 数据库迁移（只运行一次）
   snuba-bootstrap:
     image: getsentry/snuba:latest
@@ -304,6 +379,7 @@ services:
     command: bootstrap --no-migrate --force
     restart: "no"
 
+  # Snuba 数据库表结构迁移（只运行一次）
   snuba-migrate:
     image: getsentry/snuba:latest
     depends_on:
@@ -449,6 +525,51 @@ services:
           memory: 512M
     entrypoint: ["bash", "-c", "python3 /patches/replay-ingest.py && exec sentry run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings"]
 
+  # Sentry Ingest Metrics Consumer（处理 metrics 数据）
+  sentry-ingest-consumer-metrics:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - kafka-init
+      - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    command: run consumer ingest-metrics --consumer-group metrics-consumer
+
+  # Sentry Ingest Generic Metrics Consumer（处理 generic metrics 数据，Insights 核心依赖）
+  sentry-ingest-consumer-generic-metrics:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - kafka-init
+      - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    command: run consumer ingest-generic-metrics --consumer-group generic-metrics-consumer
+
+  # Sentry Process Spans Consumer（处理 spans，提取 metrics，Insights 页面所需）
+  sentry-process-spans:
+    <<: *sentry-defaults
+    depends_on:
+      - redis
+      - postgres
+      - kafka
+      - kafka-init
+      - snuba-api
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    command: run consumer --no-strict-offset-reset process-spans --consumer-group process-spans
+
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
   sentry-post-process-forwarder-errors:
     <<: *sentry-defaults
@@ -463,7 +584,7 @@ services:
           memory: 768M
     command: run consumer post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-commit-log --synchronize-commit-group snuba-consumers
 
-  # Sentry Post Process Forwarder Transactions
+  # Sentry Post Process Forwarder Transactions（事件后处理：性能数据的 Issue 分组、告警等）
   sentry-post-process-forwarder-transactions:
     <<: *sentry-defaults
     depends_on:
@@ -477,12 +598,21 @@ services:
           memory: 768M
     command: run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-transactions-commit-log --synchronize-commit-group snuba-consumers
 
+# ============ 数据卷 ============
 volumes:
+  # Sentry 应用数据（文件存储等）
   sentry-data:
+  # Redis 持久化数据
   redis-data:
+  # PostgreSQL 数据库数据
   postgres-data:
+  # Zookeeper 数据
   zookeeper-data:
+  # Zookeeper 日志
   zookeeper-log:
+  # Kafka 消息数据
   kafka-data:
+  # ClickHouse 列式数据库数据
   clickhouse-data:
+  # ClickHouse 日志
   clickhouse-log:
