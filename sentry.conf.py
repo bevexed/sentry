@@ -160,8 +160,17 @@ SENTRY_FEATURES = {
     "organizations:performance-span-histogram-view": True,
     "organizations:performance-trace-details": True,
     "organizations:performance-tracing-without-performance": True,
+
+    "organizations:indexed-spans-extraction": True,
+    "organizations:starfish-view": True,
+    "organizations:insights-entry-points": True,
+    "organizations:insights-initial-modules": True,
+    "organizations:performance-spans-new-ui": True,
+
     # 启用自定义入站过滤器
     "projects:custom-inbound-filters": True,
+
+
 }
 
 # ============ 数据保留策略（天） ============

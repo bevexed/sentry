@@ -234,19 +234,10 @@ print('密码已重置')
 # 1. 停止 Relay
 docker compose stop relay
 
-# 2. 删除旧凭据
-rm -f relay/credentials.json
+# 2. 重新生成凭据（在容器内直接写入挂载目录）
+docker compose run --rm --no-deps relay credentials generate --overwrite
 
-# 3. 确保 relay 目录可写（容器内用 uid=1000 运行）
-chmod 777 relay/
-
-# 4. 重新生成凭据（在容器内直接写入挂载目录）
-docker compose run --rm --entrypoint="" relay relay credentials generate
-
-# 5. 恢复目录权限
-chmod 755 relay/
-
-# 6. 重启 Relay
+# 3. 重启 Relay
 docker compose up -d relay
 ```
 

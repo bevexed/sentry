@@ -98,7 +98,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-log:/var/lib/zookeeper/log
@@ -171,7 +171,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 8G
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-log:/var/log/clickhouse-server
@@ -216,7 +216,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Outcomes Consumer
@@ -246,7 +246,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     command: consumer --storage transactions --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Replays Consumer（将 replay 事件写入 ClickHouse）
@@ -312,30 +312,6 @@ services:
     command: migrations migrate --force
     restart: "no"
 
-  # ClickHouse TTL 自动设置（启动时自动为各表设置 14 天过期）
-  clickhouse-ttl-init:
-    image: clickhouse/clickhouse-server:25.3
-    depends_on:
-      - clickhouse
-      - snuba-migrate
-    restart: "no"
-    entrypoint: ["bash", "-c", "
-      RETENTION_DAYS=14 &&
-      echo '等待 ClickHouse 就绪...' &&
-      for i in $$(seq 1 30); do
-        clickhouse-client --host clickhouse --query 'SELECT 1' 2>/dev/null && break;
-        sleep 2;
-      done &&
-      echo \"设置 TTL: 保留 $${RETENTION_DAYS} 天\" &&
-      for pair in 'replays_local:timestamp' 'errors_local:timestamp' 'transactions_local:finish_ts' 'spans_local:timestamp' 'outcomes_raw_local:timestamp' 'outcomes_hourly_local:timestamp'; do
-        table=$${pair%%:*} &&
-        col=$${pair##*:} &&
-        clickhouse-client --host clickhouse --query \"ALTER TABLE $${table} MODIFY TTL $${col} + INTERVAL $${RETENTION_DAYS} DAY\" 2>/dev/null &&
-        echo \"  ✓ $${table}\" || echo \"  ⚠ $${table}（跳过）\";
-      done &&
-      echo 'TTL 设置完成'
-      "]
-
   # ============ Relay（SDK 事件接收入口） ============
 
   # Sentry Relay（接收 SDK 上报的事件，通过 Nginx 转发给 Sentry Web）
@@ -345,10 +321,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     depends_on:
       nginx:
-        condition: service_healthy
+        condition: service_started
       kafka:
         condition: service_started
       redis:
@@ -367,12 +343,6 @@ services:
       - "${SENTRY_PORT:-9000}:9000"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:9000/ 2>/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   # ============ Sentry 核心服务 ============
 
@@ -427,7 +397,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     command: run cron
 
   # Sentry Ingest Consumer（事件接收处理）
@@ -476,7 +446,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 512M
     entrypoint: ["bash", "-c", "python3 /patches/replay-ingest.py && exec sentry run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings"]
 
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
@@ -506,23 +476,6 @@ services:
         limits:
           memory: 768M
     command: run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-transactions-commit-log --synchronize-commit-group snuba-consumers
-
-  # Sentry 数据库初始化（只运行一次）
-  sentry-init:
-    <<: *sentry-defaults
-    depends_on:
-      - redis
-      - postgres
-    command: upgrade --noinput
-    restart: "no"
-
-  # 创建管理员账号（只运行一次，依赖 sentry-init 完成）
-  sentry-create-admin:
-    <<: *sentry-defaults
-    depends_on:
-      - sentry-init
-    entrypoint: ["bash", "-c", "sentry createuser --email ${SENTRY_ADMIN_EMAIL:-admin@example.com} --password ${SENTRY_ADMIN_PASSWORD:-admin123456} --superuser --no-input || true"]
-    restart: "no"
 
 volumes:
   sentry-data:
