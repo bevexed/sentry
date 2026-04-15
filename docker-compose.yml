@@ -280,19 +280,20 @@ services:
     command: replacer --storage errors --auto-offset-reset=latest
 
   # Snuba Spans Consumer（将 spans 数据写入 ClickHouse，支持性能功能）
-  snuba-spans-consumer:
-    image: getsentry/snuba:latest
-    restart: unless-stopped
-    depends_on:
-      - redis
-      - clickhouse
-      - kafka
-    environment: *snuba-env
-    deploy:
-      resources:
-        limits:
-          memory: 192M
-    command: consumer --storage spans --auto-offset-reset=latest --max-batch-time-ms 750
+  # 已禁用：Sentry 25.7.0 兼容性问题，且 snuba-spans topic 为空
+  # snuba-spans-consumer:
+  #   image: getsentry/snuba:latest
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - redis
+  #     - clickhouse
+  #     - kafka
+  #   environment: *snuba-env
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 192M
+  #   command: consumer --storage spans --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Metrics Consumer（将 metrics 数据写入 ClickHouse）
   snuba-metrics-consumer:
@@ -556,19 +557,20 @@ services:
     command: run consumer ingest-generic-metrics --consumer-group generic-metrics-consumer
 
   # Sentry Process Spans Consumer（处理 spans，提取 metrics，Insights 页面所需）
-  sentry-process-spans:
-    <<: *sentry-defaults
-    depends_on:
-      - redis
-      - postgres
-      - kafka
-      - kafka-init
-      - snuba-api
-    deploy:
-      resources:
-        limits:
-          memory: 768M
-    command: run consumer --no-strict-offset-reset process-spans --consumer-group process-spans
+  # 已禁用：Sentry 25.7.0 版本与消息格式不兼容，导致 Invalid message not found in buffer 错误
+  # sentry-process-spans:
+  #   <<: *sentry-defaults
+  #   depends_on:
+  #     - redis
+  #     - postgres
+  #     - kafka
+  #     - kafka-init
+  #     - snuba-api
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 768M
+  #   command: run consumer --no-strict-offset-reset process-spans --consumer-group process-spans
 
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
   sentry-post-process-forwarder-errors:

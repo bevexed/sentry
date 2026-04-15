@@ -185,15 +185,25 @@ SENTRY_FEATURES.update(
         # 性能/Tracing/Spans 相关（Pageloads 核心依赖）
         + (
             "organizations:performance-view",
-            "organizations:span-stats",
-            "organizations:visibility-explore-view",
-            "organizations:visibility-explore-range-high",
+            # organizations:span-stats  # 已禁用：Traces 页面 span 聚合功能
+            # organizations:visibility-explore-view  # 已禁用：Traces 页面探索视图
+            # organizations:visibility-explore-range-high  # 已禁用：Traces 页面范围探索
             "organizations:transaction-metrics-extraction",
-            "organizations:indexed-spans-extraction",
+            # organizations:indexed-spans-extraction  # 已禁用：Sentry 25.7.0 兼容性问题
             "organizations:insights-entry-points",
             "organizations:insights-initial-modules",
             "organizations:insights-addon-modules",
+            "organizations:insights-modules-use-eap",
+            "organizations:starfish-browser-resource-module-image-view",
+            "organizations:starfish-browser-resource-module-ui",
+            "organizations:starfish-browser-webvitals",
+            "organizations:starfish-browser-webvitals-pageoverview-v2",
+            "organizations:starfish-browser-webvitals-use-backend-scores",
             "organizations:starfish-mobile-appstart",
+            "organizations:performance-calculate-score-relay",
+            "organizations:starfish-browser-webvitals-replace-fid-with-inp",
+            "organizations:performance-database-view",
+            "organizations:performance-screens-view",
             "organizations:on-demand-metrics-extraction",
             "projects:span-metrics-extraction",
             "projects:span-metrics-extraction-addons",
