@@ -174,7 +174,7 @@ SENTRY_FEATURES.update(
             "organizations:dashboards-mep",
             "organizations:mep-rollout-flag",
             "organizations:dashboards-rh-widget",
-            "organizations:dynamic-sampling",
+            # "organizations:dynamic-sampling",  # 已禁用：避免 recalibrate_orgs_batch 错误
             "projects:custom-inbound-filters",
             "projects:data-forwarding",
             "projects:discard-groups",
@@ -184,29 +184,29 @@ SENTRY_FEATURES.update(
         )
         # 性能/Tracing/Spans 相关（Pageloads 核心依赖）
         + (
-            "organizations:performance-view",
+            # "organizations:performance-view",  # 已禁用：关闭性能监控
             # organizations:span-stats  # 已禁用：Traces 页面 span 聚合功能
-            # organizations:visibility-explore-view  # 已禁用：Traces 页面探索视图
+            # "organizations:visibility-explore-view",  # 已禁用：导致 Snuba 405 错误
             # organizations:visibility-explore-range-high  # 已禁用：Traces 页面范围探索
             "organizations:transaction-metrics-extraction",
             # organizations:indexed-spans-extraction  # 已禁用：Sentry 25.7.0 兼容性问题
-            "organizations:insights-entry-points",
-            "organizations:insights-initial-modules",
-            "organizations:insights-addon-modules",
-            "organizations:insights-modules-use-eap",
-            "organizations:starfish-browser-resource-module-image-view",
-            "organizations:starfish-browser-resource-module-ui",
-            "organizations:starfish-browser-webvitals",
-            "organizations:starfish-browser-webvitals-pageoverview-v2",
-            "organizations:starfish-browser-webvitals-use-backend-scores",
-            "organizations:starfish-mobile-appstart",
-            "organizations:performance-calculate-score-relay",
-            "organizations:starfish-browser-webvitals-replace-fid-with-inp",
-            "organizations:performance-database-view",
-            "organizations:performance-screens-view",
-            "organizations:on-demand-metrics-extraction",
-            "projects:span-metrics-extraction",
-            "projects:span-metrics-extraction-addons",
+            # "organizations:insights-entry-points",  # 已禁用：关闭 Insights AI 功能
+            # "organizations:insights-initial-modules",  # 已禁用：关闭 Insights AI 功能
+            # "organizations:insights-addon-modules",  # 已禁用：关闭 Insights AI 功能
+            # "organizations:insights-modules-use-eap",  # 已禁用：关闭 Insights AI 功能
+            # "organizations:starfish-browser-resource-module-image-view",  # 已禁用：关闭 Starfish
+            # "organizations:starfish-browser-resource-module-ui",  # 已禁用：关闭 Starfish
+            # "organizations:starfish-browser-webvitals",  # 已禁用：关闭 Starfish
+            # "organizations:starfish-browser-webvitals-pageoverview-v2",  # 已禁用：关闭 Starfish
+            # "organizations:starfish-browser-webvitals-use-backend-scores",  # 已禁用：关闭 Starfish
+            # "organizations:starfish-mobile-appstart",  # 已禁用：关闭 Starfish
+            # "organizations:performance-calculate-score-relay",  # 已禁用：关闭性能评分
+            # "organizations:starfish-browser-webvitals-replace-fid-with-inp",  # 已禁用：关闭 Starfish
+            # "organizations:performance-database-view",  # 已禁用：关闭性能视图
+            # "organizations:performance-screens-view",  # 已禁用：关闭性能视图
+            # "organizations:on-demand-metrics-extraction",  # 已禁用：关闭按需指标提取
+            # "projects:span-metrics-extraction",  # 已禁用：关闭 Span 指标
+            # "projects:span-metrics-extraction-addons",  # 已禁用：关闭 Span 指标
         )
         # Session Replay
         + (
@@ -227,6 +227,10 @@ SENTRY_USE_RELAY = True
 
 # ============ 邮件（留空，通过 Web UI 配置） ============
 SENTRY_OPTIONS["mail.backend"] = "dummy"
+
+# ============ Symbolicator（JavaScript source map symbolication） ============
+# 已禁用：用户不需要 source map symbolication 功能
+SENTRY_OPTIONS["symbolicator.enabled"] = False
 SENTRY_OPTIONS["mail.from"] = env("SENTRY_SERVER_EMAIL") or "root@localhost"
 
 # ============ Allowed Hosts (for CSRF protection) ============

@@ -279,22 +279,6 @@ services:
           memory: 192M
     command: replacer --storage errors --auto-offset-reset=latest
 
-  # Snuba Spans Consumer（将 spans 数据写入 ClickHouse，支持性能功能）
-  # 已禁用：Sentry 25.7.0 兼容性问题，且 snuba-spans topic 为空
-  # snuba-spans-consumer:
-  #   image: getsentry/snuba:latest
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - redis
-  #     - clickhouse
-  #     - kafka
-  #   environment: *snuba-env
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 192M
-  #   command: consumer --storage spans --auto-offset-reset=latest --max-batch-time-ms 750
-
   # Snuba Metrics Consumer（将 metrics 数据写入 ClickHouse）
   snuba-metrics-consumer:
     image: getsentry/snuba:latest
@@ -309,66 +293,6 @@ services:
         limits:
           memory: 256M
     command: rust-consumer --storage metrics_raw --consumer-group snuba-metrics-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
-
-  # Snuba Generic Metrics Distributions Consumer（消费 distributions 类型的 generic metrics 写入 ClickHouse）
-  snuba-generic-metrics-distributions-consumer:
-    image: getsentry/snuba:latest
-    restart: unless-stopped
-    depends_on:
-      - redis
-      - clickhouse
-      - kafka
-    environment: *snuba-env
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    command: rust-consumer --storage generic_metrics_distributions_raw --consumer-group snuba-gen-metrics-distributions-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
-
-  # Snuba Generic Metrics Sets Consumer（消费 sets 类型的 generic metrics 写入 ClickHouse）
-  snuba-generic-metrics-sets-consumer:
-    image: getsentry/snuba:latest
-    restart: unless-stopped
-    depends_on:
-      - redis
-      - clickhouse
-      - kafka
-    environment: *snuba-env
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    command: rust-consumer --storage generic_metrics_sets_raw --consumer-group snuba-gen-metrics-sets-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
-
-  # Snuba Generic Metrics Counters Consumer（消费 counters 类型的 generic metrics 写入 ClickHouse）
-  snuba-generic-metrics-counters-consumer:
-    image: getsentry/snuba:latest
-    restart: unless-stopped
-    depends_on:
-      - redis
-      - clickhouse
-      - kafka
-    environment: *snuba-env
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    command: rust-consumer --storage generic_metrics_counters_raw --consumer-group snuba-gen-metrics-counters-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
-
-  # Snuba Generic Metrics Gauges Consumer（消费 gauges 类型的 generic metrics 写入 ClickHouse）
-  snuba-generic-metrics-gauges-consumer:
-    image: getsentry/snuba:latest
-    restart: unless-stopped
-    depends_on:
-      - redis
-      - clickhouse
-      - kafka
-    environment: *snuba-env
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    command: rust-consumer --storage generic_metrics_gauges_raw --consumer-group snuba-gen-metrics-gauges-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
 
   # Snuba 数据库迁移（只运行一次）
   snuba-bootstrap:
@@ -540,37 +464,6 @@ services:
         limits:
           memory: 768M
     command: run consumer ingest-metrics --consumer-group metrics-consumer
-
-  # Sentry Ingest Generic Metrics Consumer（处理 generic metrics 数据，Insights 核心依赖）
-  sentry-ingest-consumer-generic-metrics:
-    <<: *sentry-defaults
-    depends_on:
-      - redis
-      - postgres
-      - kafka
-      - kafka-init
-      - snuba-api
-    deploy:
-      resources:
-        limits:
-          memory: 768M
-    command: run consumer ingest-generic-metrics --consumer-group generic-metrics-consumer
-
-  # Sentry Process Spans Consumer（处理 spans，提取 metrics，Insights 页面所需）
-  # 已禁用：Sentry 25.7.0 版本与消息格式不兼容，导致 Invalid message not found in buffer 错误
-  # sentry-process-spans:
-  #   <<: *sentry-defaults
-  #   depends_on:
-  #     - redis
-  #     - postgres
-  #     - kafka
-  #     - kafka-init
-  #     - snuba-api
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 768M
-  #   command: run consumer --no-strict-offset-reset process-spans --consumer-group process-spans
 
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
   sentry-post-process-forwarder-errors:
