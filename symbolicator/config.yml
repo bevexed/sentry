@@ -1,0 +1,12 @@
+# See: https://getsentry.github.io/symbolicator/#configuration
+cache_dir: "/data"
+bind: "0.0.0.0:3021"
+logging:
+  level: "warn"
+
+sentry_dsn: null # TODO: Automatically fill this with the internal project DSN
+
+# 如需 statsd 监控，取消下面的注释并填写实际地址
+# metrics:
+#   statsd: "your-statsd-host:8125"
+#   prefix: "sentry.symbolicator"

@@ -15,3 +15,8 @@ processing:
     - name: "bootstrap.servers"
       value: "kafka:9092"
   redis: "redis://redis:6379"
+  # 限制内存使用，防止 OOM
+  max_envelope_size: 10485760  # 10MB
+  max_message_size: 10485760  # 10MB
+  # 限制并发连接数
+  max_concurrent_requests: 1000

@@ -45,7 +45,9 @@ SENTRY_OPTIONS.update(
                     }
                 }
             }
-        }
+        },
+        "symbolicator.enabled": True,
+        "symbolicator.options": {"url": "http://symbolicator:3021", "connect_timeout": 5},
     }
 )
 
@@ -227,11 +229,11 @@ SENTRY_USE_RELAY = True
 
 # ============ 邮件（留空，通过 Web UI 配置） ============
 SENTRY_OPTIONS["mail.backend"] = "dummy"
-
-# ============ Symbolicator（JavaScript source map symbolication） ============
-# 已禁用：用户不需要 source map symbolication 功能
-SENTRY_OPTIONS["symbolicator.enabled"] = False
 SENTRY_OPTIONS["mail.from"] = env("SENTRY_SERVER_EMAIL") or "root@localhost"
+
+# ============ 禁用无法访问外网的定时任务 ============
+# 禁用 AI 模型价格拉取任务（需要访问外网，内网环境下会超时）
+SENTRY_OPTIONS["sentry-ai-agent-monitoring.enabled"] = False
 
 # ============ Allowed Hosts (for CSRF protection) ============
 ALLOWED_HOSTS = [

@@ -171,7 +171,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8G
+          memory: 4G
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-log:/var/log/clickhouse-server
@@ -231,7 +231,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 192M
+          memory: 256M
     command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750
 
   # Snuba Transactions Consumer（消费 transactions 性能数据写入 ClickHouse）
@@ -261,7 +261,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 192M
+          memory: 256M
     command: consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750
 
   # Snuba Replacer（处理事件合并/删除等变更操作）
@@ -291,7 +291,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     command: rust-consumer --storage metrics_raw --consumer-group snuba-metrics-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
 
   # Snuba 数据库迁移（只运行一次）
@@ -315,6 +315,21 @@ services:
 
   # ============ Relay（SDK 事件接收入口） ============
 
+  # Symbolicator（处理 JavaScript source map symbolication）
+  symbolicator:
+    image: getsentry/symbolicator:latest
+    restart: unless-stopped
+    volumes:
+      - symbolicator-data:/data
+      - ./symbolicator/config.yml:/etc/symbolicator/config.yml:ro
+    ports:
+      - "3021:3021"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    command: run -c /etc/symbolicator/config.yml
+
   # Sentry Relay（接收 SDK 上报的事件，通过 Nginx 转发给 Sentry Web）
   relay:
     image: getsentry/relay:latest
@@ -322,7 +337,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
     depends_on:
       nginx:
         condition: service_started
@@ -511,3 +526,5 @@ volumes:
   clickhouse-data:
   # ClickHouse 日志
   clickhouse-log:
+  # Symbolicator 缓存数据
+  symbolicator-data:
