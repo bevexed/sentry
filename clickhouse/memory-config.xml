@@ -1,13 +1,14 @@
 <clickhouse>
   <profiles>
     <default>
-      <!-- 单个查询最大内存 500MB -->
-      <max_memory_usage>500000000</max_memory_usage>
-      <!-- 所有查询总内存不超过 1GB -->
-      <max_memory_usage_for_all_queries>1000000000</max_memory_usage_for_all_queries>
-      <!-- 后台合并最大内存 256MB -->
-      <max_bytes_before_external_group_by>200000000</max_bytes_before_external_group_by>
-      <max_bytes_before_external_sort>200000000</max_bytes_before_external_sort>
+      <!-- 单个查询最大内存 4GB -->
+      <max_memory_usage>4000000000</max_memory_usage>
+      <!-- 所有查询总内存不超过 5GB -->
+      <max_memory_usage_for_all_queries>5000000000</max_memory_usage_for_all_queries>
+      <!-- 外部聚合阈值 800MB -->
+      <max_bytes_before_external_group_by>800000000</max_bytes_before_external_group_by>
+      <!-- 外部排序阈值 800MB -->
+      <max_bytes_before_external_sort>800000000</max_bytes_before_external_sort>
     </default>
   </profiles>
 

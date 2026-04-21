@@ -240,6 +240,7 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "192.168.8.89",
+    "218.75.42.22",
     # Docker 内部服务名（Relay 通过 nginx 访问 Sentry Web）
     "nginx",
     "sentry-web",

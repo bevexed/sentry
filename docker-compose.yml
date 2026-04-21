@@ -171,7 +171,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 8G
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-log:/var/log/clickhouse-server
