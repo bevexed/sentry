@@ -284,4 +284,5 @@ ALLOWED_HOSTS = [
     # Docker 内部服务名（Relay 通过 nginx 访问 Sentry Web）
     "nginx",
     "sentry-web",
+    ".gch168.com",
 ]
