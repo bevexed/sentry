@@ -231,9 +231,49 @@ SENTRY_USE_RELAY = True
 SENTRY_OPTIONS["mail.backend"] = "dummy"
 SENTRY_OPTIONS["mail.from"] = env("SENTRY_SERVER_EMAIL") or "root@localhost"
 
-# ============ 禁用无法访问外网的定时任务 ============
-# 禁用 AI 模型价格拉取任务（需要访问外网，内网环境下会超时）
-SENTRY_OPTIONS["sentry-ai-agent-monitoring.enabled"] = False
+# ============ 禁用外网相关后台任务 ============
+# 禁用 Beacon（灯塔计划），防止向官网发送匿名统计数据
+SENTRY_OPTIONS["beacon.anonymous"] = False
+
+# ============ 禁用所有 AI 相关功能（Feature Flags） ============
+# 关闭 AI 总开关及所有子功能，避免页面渲染调用 AI、避免后台拉取模型价格
+_DISABLED_AI_FEATURES = (
+    # AI 总开关
+    "organizations:gen-ai-features",
+    "organizations:gen-ai-explore-traces",
+    "organizations:gen-ai-explore-traces-consent-ui",
+    # Autofix（基于 AI 的自动修复）
+    "organizations:ai-autofix",
+    "organizations:autofix",
+    "organizations:autofix-seer-preferences",
+    # Issue Summary（AI 总结 issue）
+    "organizations:ai-issue-summary",
+    "organizations:issue-details-autofix-ui",
+    # Seer（Sentry 的 AI 服务）
+    "organizations:seer-based-priority",
+    "organizations:anomaly-detection-alerts",
+    "organizations:anomaly-detection-rollout",
+    # AI Agent / LLM 监控
+    "organizations:ai-analytics",
+    "organizations:insights-agent-monitoring",
+    "organizations:agents-insights",
+)
+for _feature in _DISABLED_AI_FEATURES:
+    SENTRY_FEATURES[_feature] = False
+
+# ============ 移除访问外网的 Celery Beat 定时任务 ============
+# 注意：CELERYBEAT_SCHEDULE 的 key 是调度短名（如 "fetch-ai-model-costs"），
+# 不是任务路径，所以这里按 task 字段反向匹配后再删除
+_DISABLED_BEAT_TASKS = {
+    # AI 模型价格拉取（连 openrouter.ai，内网超时）
+    "sentry.tasks.ai_agent_monitoring.fetch_ai_model_costs",
+}
+for _key in [
+    _k
+    for _k, _v in CELERYBEAT_SCHEDULE.items()
+    if isinstance(_v, dict) and _v.get("task") in _DISABLED_BEAT_TASKS
+]:
+    CELERYBEAT_SCHEDULE.pop(_key, None)
 
 # ============ Allowed Hosts (for CSRF protection) ============
 ALLOWED_HOSTS = [

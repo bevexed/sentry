@@ -33,6 +33,10 @@ x-sentry-defaults: &sentry-defaults
   volumes:
     - sentry-data:/data
     - ./sentry.conf.py:/etc/sentry/sentry.conf.py:ro
+  extra_hosts:
+    # 将外部域名指向 127.0.0.1，避免 DNS 解析超时导致 SoftTimeLimitExceeded
+    - "openrouter.ai=127.0.0.1"
+    - "sentry.io=127.0.0.1"
 
 services:
   # ============ 基础设施 ============
