@@ -20,4 +20,39 @@
     <max_bytes_to_merge_at_max_space_in_pool>536870912</max_bytes_to_merge_at_max_space_in_pool>
     <number_of_free_entries_in_pool_to_execute_mutation>3</number_of_free_entries_in_pool_to_execute_mutation>
   </merge_tree>
+
+  <!-- 禁用 trace_log（生产环境用不到，但默认会占大量磁盘） -->
+  <trace_log remove="1"/>
+
+  <!-- 其余 system 日志限制 14 天 TTL，避免磁盘被撑满 -->
+  <query_log>
+    <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE</engine>
+    <partition_by remove="1"/>
+    <ttl remove="1"/>
+  </query_log>
+  <metric_log>
+    <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE</engine>
+    <partition_by remove="1"/>
+    <ttl remove="1"/>
+  </metric_log>
+  <text_log>
+    <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE</engine>
+    <partition_by remove="1"/>
+    <ttl remove="1"/>
+  </text_log>
+  <asynchronous_metric_log>
+    <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE</engine>
+    <partition_by remove="1"/>
+    <ttl remove="1"/>
+  </asynchronous_metric_log>
+  <part_log>
+    <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE</engine>
+    <partition_by remove="1"/>
+    <ttl remove="1"/>
+  </part_log>
+  <processors_profile_log>
+    <engine>ENGINE = MergeTree PARTITION BY event_date ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE</engine>
+    <partition_by remove="1"/>
+    <ttl remove="1"/>
+  </processors_profile_log>
 </clickhouse>
