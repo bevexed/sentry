@@ -124,14 +124,14 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_LOG_RETENTION_HOURS: 6
+      # 覆盖较长时间的机房断电或消费者停机，降低已提交 offset 超出保留范围的概率
+      KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_MESSAGE_MAX_BYTES: 50000000
       KAFKA_MAX_REQUEST_SIZE: 50000000
       # 内存优化
       KAFKA_HEAP_OPTS: "-Xmx384M -Xms256M"
       KAFKA_LOG_SEGMENT_BYTES: 26214400
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 60000
-      KAFKA_LOG_RETENTION_BYTES: 536870912
     deploy:
       resources:
         limits:
@@ -221,7 +221,8 @@ services:
       resources:
         limits:
           memory: 512M
-    command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
+    # errors 旧 offset 已失效时，从 Kafka 仍保留的最早消息继续，避免事件落库链路持续崩溃
+    command: consumer --storage errors --no-strict-offset-reset --auto-offset-reset=earliest --max-batch-time-ms 750
 
   # Snuba Outcomes Consumer（消费 outcomes 数据写入 ClickHouse，用于统计丢弃/过滤的事件）
   snuba-outcomes-consumer:
@@ -482,7 +483,8 @@ services:
       resources:
         limits:
           memory: 768M
-    command: run consumer ingest-metrics --consumer-group metrics-consumer
+    # metrics 旧 offset 已被清理时，从 Kafka 仍保留的最早消息自动恢复，避免持续崩溃重启
+    command: run consumer --no-strict-offset-reset --auto-offset-reset=earliest ingest-metrics --consumer-group metrics-consumer
 
   # Sentry Post Process Forwarder（事件后处理：Issue 分组、告警触发等）
   sentry-post-process-forwarder-errors:
@@ -496,7 +498,8 @@ services:
       resources:
         limits:
           memory: 768M
-    command: run consumer post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-commit-log --synchronize-commit-group snuba-consumers
+    # 与 Snuba errors 使用相同恢复策略，保证事件落库后仍能继续执行 Issue 后处理和告警
+    command: run consumer --no-strict-offset-reset --auto-offset-reset=earliest post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic snuba-commit-log --synchronize-commit-group snuba-consumers
 
   # Sentry Post Process Forwarder Transactions（事件后处理：性能数据的 Issue 分组、告警等）
   sentry-post-process-forwarder-transactions:
